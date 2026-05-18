@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,43 +14,55 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const getFilePath = (collection) => path.join(DATA_DIR, `${collection}.json`);
 
-// --- Cloud MongoDB Atlas Sync Schema ---
-const CollectionSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
-  data: { type: Array, default: [] }
-}, { timestamps: true });
-
-const CollectionModel = mongoose.models.Collection || mongoose.model('Collection', CollectionSchema);
-
 // In-memory cache for ultra-fast synchronous operations
 const memCache = {};
 
+// --- ExtendsClass Cloud Database Sync Config ---
+const CLOUD_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/bbafaaa';
+
 // --- Initialization routine called on server boot ---
 export const initDB = async () => {
-  const uri = process.env.MONGO_URI;
-  if (!uri) {
-    console.log('📁 MONGO_URI not found. Using purely offline local JSON database.');
-    return;
-  }
-
   try {
-    console.log('📡 Connecting to Cloud MongoDB Atlas for fileDB persistent storage...');
-    // Connect to MongoDB Atlas (if not already connected) with a fast 2-second timeout!
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 2000,
-        connectTimeoutMS: 2000
-      });
+    console.log('📡 Connecting to ExtendsClass Cloud Database for persistent storage...');
+    const response = await fetch(CLOUD_BIN_URL);
+    if (response.ok) {
+      const dbData = await response.json();
+      for (const key in dbData) {
+        memCache[key] = dbData[key];
+        // Mirror to local tmp directory so it acts as a secondary buffer
+        fs.writeFileSync(getFilePath(key), JSON.stringify(dbData[key], null, 2));
+      }
+      console.log('✅ ExtendsClass cloud database preloaded successfully!');
+    } else {
+      console.log('⚠️ Could not load ExtendsClass database. Falling back to local files.');
+      loadAllFromLocal();
     }
-    console.log('✅ Connected to MongoDB Atlas. Preloading collections into cache...');
-
-    const docs = await CollectionModel.find({});
-    for (const doc of docs) {
-      memCache[doc.name] = doc.data;
-    }
-    console.log(`✅ Preloaded ${docs.length} database tables from cloud storage into RAM.`);
   } catch (err) {
-    console.error('⚠️ Could not connect to cloud database. Defaulting to local JSON files.', err.message);
+    console.error('⚠️ ExtendsClass connection error. Defaulting to local storage.', err.message);
+    loadAllFromLocal();
+  }
+};
+
+// Fallback helper to populate cache from local files
+const loadAllFromLocal = () => {
+  const collections = [
+    'adminsettings',
+    'auditlogs',
+    'chat_messages',
+    'chat_threads',
+    'group_messages',
+    'mapnodes',
+    'markers',
+    'messages',
+    'notifications',
+    'orders',
+    'products',
+    'supportmessages',
+    'transactions',
+    'users'
+  ];
+  for (const col of collections) {
+    readCollection(col);
   }
 };
 
@@ -85,16 +96,16 @@ const writeCollection = (collection, data) => {
   // 1. Persist locally in background (non-blocking)
   fs.writeFile(getFilePath(collection), JSON.stringify(data, null, 2), () => {});
 
-  // 2. Persist to MongoDB Atlas cloud in background asynchronously
-  if (mongoose.connection.readyState === 1) {
-    CollectionModel.findOneAndUpdate(
-      { name: collection },
-      { name: collection, data: data },
-      { upsert: true, new: true }
-    ).catch(err => {
-      console.error(`⚠️ Cloud save error for table [${collection}]:`, err.message);
-    });
-  }
+  // 2. Persist to ExtendsClass Cloud Database asynchronously (non-blocking)
+  fetch(CLOUD_BIN_URL, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(memCache)
+  }).catch(err => {
+    console.error('⚠️ ExtendsClass Cloud save error:', err.message);
+  });
 };
 
 const generateId = () => Date.now().toString() + Math.random().toString(36).slice(2, 7);
