@@ -1,0 +1,23 @@
+# Node dependency directories
+node_modules/
+**/node_modules/
+
+# Local env files
+.env
+.env.local
+.env.development
+.env.production.local
+.env.development.local
+
+# Build output directories
+dist/
+**/dist/
+build/
+**/build/
+
+# Local flat-file database files (since we now persist to MongoDB Atlas!)
+backend/data/*.json
+
+# System files
+.DS_Store
+Thumbs.db
