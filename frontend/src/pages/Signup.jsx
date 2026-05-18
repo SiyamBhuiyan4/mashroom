@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,11 +11,23 @@ const Signup = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
-  const { register } = useContext(AuthContext);
+  const { user, register, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
   const role = new URLSearchParams(location.search).get('role') || 'buyer';
   const isFarmer = role === 'farmer';
+
+  useEffect(() => {
+    if (user) {
+      if (user.role !== role) {
+        logout();
+      } else {
+        if (user.role === 'admin') navigate('/admin');
+        else if (user.role === 'farmer') navigate('/farmer');
+        else navigate('/dashboard');
+      }
+    }
+  }, [user, role, logout, navigate]);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
 

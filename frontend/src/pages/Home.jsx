@@ -30,9 +30,8 @@ const Home = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      if (user.role === 'admin') navigate('/admin');
-      else if (user.role === 'farmer') navigate('/farmer');
+    if (user && user.role !== 'admin') {
+      if (user.role === 'farmer') navigate('/farmer');
       else navigate('/dashboard');
     }
   }, [user, navigate]);
