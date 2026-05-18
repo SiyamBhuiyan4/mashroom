@@ -17,6 +17,7 @@ const NAV = [
   { id: 'map', icon: '🗺️', label: 'Map View' },
   { id: 'messages', icon: '💬', label: 'Messages' },
   { id: 'group_chat', icon: '👥', label: 'Community Chat' },
+  { id: 'audit_logs', icon: '📋', label: 'Audit Logs' },
   { id: 'settings', icon: '⚙️', label: 'Settings' },
 ];
 
@@ -61,6 +62,12 @@ const AdminDashboard = () => {
   const [sellerPage, setSellerPage] = useState(1);
   const [buyerPage, setBuyerPage] = useState(1);
   const [assigningLocation, setAssigningLocation] = useState(null); // farmerId being assigned
+
+  // Redesign states
+  const [allFarmers, setAllFarmers] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [settlementPercentages, setSettlementPercentages] = useState({});
 
   // Admin Override Modal states
   const [showOverrideModal, setShowOverrideModal] = useState(false);
@@ -128,6 +135,7 @@ const AdminDashboard = () => {
     if (tab === 'farmers') loadPendingFarmers();
     if (tab === 'messages') loadMessages();
     if (tab === 'group_chat') loadGroupMessages();
+    if (tab === 'audit_logs') loadAuditLogs();
   }, [tab]);
 
   const loadAll = () => {
@@ -142,6 +150,20 @@ const AdminDashboard = () => {
     loadSellers();
     loadBuyers();
     loadSupportMsgs();
+    loadAllFarmers();
+    loadAuditLogs();
+  };
+
+  const loadAllFarmers = () => {
+    axios.get('/api/admin/sellers?limit=1000')
+      .then(r => setAllFarmers(r.data && Array.isArray(r.data.sellers) ? r.data.sellers : []))
+      .catch(() => {});
+  };
+
+  const loadAuditLogs = () => {
+    axios.get('/api/admin/audit-logs', { headers: { Authorization: `Bearer ${user?.token}` } })
+      .then(r => setAuditLogs(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {});
   };
 
   const loadSellers = (page = 1, search = sellerSearch) =>
@@ -315,9 +337,14 @@ const AdminDashboard = () => {
     catch { showMsg('Failed', true); }
   };
 
-  const confirmDispatch = async (orderId) => {
+  const confirmDispatch = async (orderId, farmerId) => {
     setLoad('dispatch_' + orderId, true);
-    try { await axios.post('/api/orders/confirm', { orderId }); loadOrders(); showMsg('Order confirmed & dispatched!'); }
+    try { 
+      await axios.post('/api/orders/confirm', { orderId, farmerId }, { headers: { Authorization: `Bearer ${user?.token}` } }); 
+      loadOrders(); 
+      loadAuditLogs();
+      showMsg(farmerId ? 'Order confirmed & assigned to seller!' : 'Order confirmed! Admin will deliver directly.'); 
+    }
     catch (e) { showMsg(e.response?.data?.message || 'Failed', true); }
     setLoad('dispatch_' + orderId, false);
   };
@@ -587,16 +614,25 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleUpdateOrderEarnings = async (orderId, approvedEarnings, isEarningApproved) => {
+  const finalizeSettlement = async (orderId) => {
+    const pctValue = settlementPercentages[orderId] !== undefined ? settlementPercentages[orderId] : 80;
+    const pct = parseFloat(pctValue);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      return showMsg('Please enter a percentage between 0 and 100.', true);
+    }
+    if (!window.confirm(`Finalize payout at ${pct}% for this order? This action is permanent.`)) return;
+    
+    setLoad('settle_' + orderId, true);
     try {
-      await axios.put(`/api/admin/orders/${orderId}/earnings`, { approvedEarnings, isEarningApproved }, { headers: { Authorization: `Bearer ${user?.token}` } });
+      await axios.post('/api/admin/orders/settle', { orderId, sellerPercentage: pct }, { headers: { Authorization: `Bearer ${user?.token}` } });
       loadOrders();
       loadAnalytics();
-      setEditEarningsOrderId(null);
-      showMsg('Ledger earnings updated successfully by Admin.');
-    } catch (err) {
-      showMsg(err.response?.data?.message || 'Failed to update ledger earnings.', true);
+      loadAuditLogs();
+      showMsg('Settlement finalized & seller paid successfully!');
+    } catch (e) {
+      showMsg(e.response?.data?.message || 'Settlement failed', true);
     }
+    setLoad('settle_' + orderId, false);
   };
 
   const filteredOrders = orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter);
@@ -868,11 +904,35 @@ const AdminDashboard = () => {
                               <td>
                                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                                   {o.status === 'Order Pending' && (
-                                    <>
-                                      <button className="btn btn-primary btn-sm" onClick={() => confirmDispatch(o._id)} disabled={loading['dispatch_' + o._id]}>
-                                        {loading['dispatch_' + o._id] ? '...' : '✅ Confirm'}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px dashed rgba(255,255,255,0.1)', minWidth: '180px' }}>
+                                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                        <span>🚴</span> Delivery Option:
+                                      </div>
+                                      <select 
+                                        className="input-field" 
+                                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem', width: '100%', background: 'var(--bg-card)' }}
+                                        id={`assign-select-${o._id}`}
+                                        defaultValue=""
+                                      >
+                                        <option value="">Direct Delivery (Admin)</option>
+                                        {allFarmers.map(f => (
+                                          <option key={f._id} value={f._id}>
+                                            👨‍🌾 {f.name} ({f.district || 'N/A'})
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button 
+                                        className="btn btn-primary btn-sm" 
+                                        onClick={() => {
+                                          const selectEl = document.getElementById(`assign-select-${o._id}`);
+                                          confirmDispatch(o._id, selectEl ? selectEl.value : null);
+                                        }} 
+                                        disabled={loading['dispatch_' + o._id]}
+                                        style={{ width: '100%', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                      >
+                                        {loading['dispatch_' + o._id] ? 'Dispatched...' : 'Confirm order'}
                                       </button>
-                                    </>
+                                    </div>
                                   )}
                                   {o.status === 'Order Confirmed' && (
                                     <button className="btn btn-warning btn-sm" onClick={() => updateOrderStatus(o._id, 'Out for Delivery')}>🚚 Dispatch</button>
@@ -914,18 +974,17 @@ const AdminDashboard = () => {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Order details</th>
+                            <th>Order Details</th>
                             <th>Seller / Farmer</th>
-                            <th>Details</th>
-                            <th>Raw Cost</th>
-                            <th>Approved Earnings</th>
-                            <th>Approval Status</th>
-                            <th>Actions</th>
+                            <th>Product Details</th>
+                            <th>Total Cost</th>
+                            <th>Seller Payout Share</th>
+                            <th>Settlement Status</th>
+                            <th>Settlement Action</th>
                           </tr>
                         </thead>
                         <tbody>
                           {orders.filter(o => o.status === 'Delivered').map(o => {
-                            const isEditing = editEarningsOrderId === o._id;
                             return (
                               <tr key={o._id}>
                                 <td>
@@ -934,7 +993,7 @@ const AdminDashboard = () => {
                                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(o.createdAt).toLocaleDateString()}</div>
                                 </td>
                                 <td>
-                                  <div style={{ fontWeight: 600 }}>{o.farmerName || 'N/A'}</div>
+                                  <div style={{ fontWeight: 600 }}>{o.farmerName || 'Direct (Admin)'}</div>
                                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>ID: {o.farmerId ? o.farmerId.substring(0, 8) + '...' : '—'}</div>
                                 </td>
                                 <td>
@@ -946,65 +1005,64 @@ const AdminDashboard = () => {
                                   {o.deliveryCharge > 0 && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>+৳{o.deliveryCharge} delivery</div>}
                                 </td>
                                 <td>
-                                  {isEditing ? (
-                                    <input 
-                                      className="input-field" 
-                                      type="number" 
-                                      value={editEarningsValue} 
-                                      onChange={e => setEditEarningsValue(e.target.value)} 
-                                      style={{ width: '90px', padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
-                                    />
-                                  ) : (
-                                    <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>৳{o.approvedEarnings || 0}</div>
-                                  )}
-                                </td>
-                                <td>
-                                  {isEditing ? (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                      <input 
-                                        type="checkbox" 
-                                        id={`approve-${o._id}`} 
-                                        checked={editEarningsApproved} 
-                                        onChange={e => setEditEarningsApproved(e.target.checked)} 
-                                        style={{ width: '16px', height: '16px', accentColor: 'var(--color-primary)' }} 
-                                      />
-                                      <label htmlFor={`approve-${o._id}`} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', cursor: 'pointer' }}>Approve</label>
+                                  {!o.farmerId ? (
+                                    <div style={{ color: 'var(--text-muted)' }}>—</div>
+                                  ) : o.isSettled ? (
+                                    <div>
+                                      <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>৳{o.sellerEarnings}</div>
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>({o.sellerPercentage}%)</div>
                                     </div>
                                   ) : (
-                                    <span className={`badge badge-${o.isEarningApproved ? 'green' : 'yellow'}`}>
-                                      {o.isEarningApproved ? 'Approved & Credited' : 'Pending Verification'}
-                                    </span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                      <input 
+                                        type="number" 
+                                        className="input-field" 
+                                        min="0" 
+                                        max="100" 
+                                        value={settlementPercentages[o._id] !== undefined ? settlementPercentages[o._id] : 80}
+                                        onChange={e => setSettlementPercentages(prev => ({ ...prev, [o._id]: e.target.value }))}
+                                        style={{ width: '85px', padding: '0.25rem 0.4rem', fontSize: '0.8rem' }}
+                                      />
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>% share (0-100)</span>
+                                    </div>
                                   )}
                                 </td>
                                 <td>
-                                  {isEditing ? (
-                                    <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                      <button 
-                                        className="btn btn-primary btn-sm" 
-                                        onClick={() => handleUpdateOrderEarnings(o._id, editEarningsValue, editEarningsApproved)}
-                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }}
-                                      >
-                                        💾 Save
-                                      </button>
-                                      <button 
-                                        className="btn btn-outline btn-sm" 
-                                        onClick={() => setEditEarningsOrderId(null)}
-                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }}
-                                      >
-                                        Cancel
-                                      </button>
+                                  {!o.farmerId ? (
+                                    <span className="badge badge-green">Self-Handled</span>
+                                  ) : o.isSettled ? (
+                                    <span className="badge badge-green">Payout Disbursed</span>
+                                  ) : (
+                                    (() => {
+                                      const pct = parseFloat(settlementPercentages[o._id] !== undefined ? settlementPercentages[o._id] : 80) || 0;
+                                      const sellerShare = ((o.totalCost * pct) / 100).toFixed(2);
+                                      const adminShare = (o.totalCost - sellerShare).toFixed(2);
+                                      return (
+                                        <div style={{ fontSize: '0.78rem' }}>
+                                          <div style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Seller: ৳{sellerShare}</div>
+                                          <div style={{ color: 'var(--text-muted)' }}>Admin: ৳{adminShare}</div>
+                                        </div>
+                                      );
+                                    })()
+                                  )}
+                                </td>
+                                <td>
+                                  {!o.farmerId ? (
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-primary)' }}>
+                                      ৳{(o.totalCost || 0) + (o.deliveryCharge || 0)} Admin Rev
+                                    </div>
+                                  ) : o.isSettled ? (
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                      Admin commission: ৳{o.adminEarnings}
                                     </div>
                                   ) : (
                                     <button 
-                                      className="btn btn-outline btn-sm" 
-                                      onClick={() => {
-                                        setEditEarningsOrderId(o._id);
-                                        setEditEarningsValue(o.approvedEarnings || 0);
-                                        setEditEarningsApproved(!!o.isEarningApproved);
-                                      }}
-                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                      className="btn btn-primary btn-sm" 
+                                      onClick={() => finalizeSettlement(o._id)}
+                                      disabled={loading['settle_' + o._id]}
+                                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
                                     >
-                                      ✏️ Adjust Profit
+                                      {loading['settle_' + o._id] ? '...' : '💸 Finalize Payout'}
                                     </button>
                                   )}
                                 </td>
@@ -1625,6 +1683,78 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
+                </div>
+              )}
+
+              {/* SYSTEM AUDIT LOGS */}
+              {tab === 'audit_logs' && (
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>📋</span> Real-time System Audit Logs
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    Monitor system events, order creations, farmer assignments, password-verified tracking updates, and financial settlements.
+                  </p>
+                  
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <input 
+                      type="text" 
+                      className="input-field" 
+                      placeholder="Search audit logs by message, type, or user ID..." 
+                      value={auditSearch} 
+                      onChange={e => setAuditSearch(e.target.value)} 
+                      style={{ maxWidth: '400px' }} 
+                    />
+                    {auditSearch && (
+                      <button className="btn btn-outline btn-sm" onClick={() => setAuditSearch('')}>Clear</button>
+                    )}
+                  </div>
+
+                  <div className="glass-panel" style={{ overflow: 'auto' }}>
+                    {auditLogs.length === 0 ? (
+                      <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No audit logs recorded yet.</div>
+                    ) : (
+                      <table className="data-table" style={{ fontSize: '0.88rem' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '180px' }}>Timestamp</th>
+                            <th style={{ width: '150px' }}>Event Type</th>
+                            <th>Event Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditLogs.filter(log => {
+                            const q = auditSearch.toLowerCase();
+                            return !q || 
+                              log.type?.toLowerCase().includes(q) || 
+                              log.details?.toLowerCase().includes(q) ||
+                              log._id?.includes(q) ||
+                              log.userId?.includes(q) ||
+                              log.adminId?.includes(q);
+                          }).map(log => (
+                            <tr key={log._id}>
+                              <td style={{ color: 'var(--text-muted)' }}>
+                                {new Date(log.timestamp).toLocaleString()}
+                              </td>
+                              <td>
+                                <span className={`badge badge-${
+                                  log.type === 'order_creation' ? 'blue' : 
+                                  log.type === 'seller_assignment' ? 'purple' : 
+                                  log.type === 'order_settlement' ? 'green' : 
+                                  log.type === 'tracking_update' ? 'yellow' : 'blue'
+                                }`} style={{ fontSize: '0.75rem' }}>
+                                  {log.type}
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: 500, color: 'var(--text-main)' }}>
+                                {log.details}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
                 </div>
               )}
 

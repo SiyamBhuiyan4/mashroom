@@ -57,6 +57,13 @@ const FarmerDashboard = () => {
   const [groupLoading, setGroupLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState('');
+
+  // Redesign states for tracking updates and safety verification
+  const [showPasswordModal, setShowPasswordModal] = useState(null); // { orderId, targetStatus } or null
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState('');
+
   const [transactions, setTransactions] = useState([]);
   const { authHeader } = useContext(AuthContext);
 
@@ -140,6 +147,37 @@ const FarmerDashboard = () => {
   const loadOrders = () => {
     if (!user?._id) return;
     axios.get(`/api/orders/farmer/${user._id}`).then(r => setOrders(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  };
+
+  const handleFarmerStatusUpdate = async (e) => {
+    if (e) e.preventDefault();
+    if (!confirmPassword.trim()) {
+      setModalError('Password is required.');
+      return;
+    }
+    setModalLoading(true);
+    setModalError('');
+    try {
+      await axios.post(
+        '/api/orders/update-status', 
+        { 
+          orderId: showPasswordModal.orderId, 
+          status: showPasswordModal.targetStatus, 
+          password: confirmPassword 
+        }, 
+        authHeader()
+      );
+      loadOrders();
+      loadAnalytics();
+      loadTransactions();
+      setShowPasswordModal(null);
+      setConfirmPassword('');
+      showMsg('✅ Tracking status updated successfully!');
+    } catch (err) {
+      setModalError(err.response?.data?.message || 'Verification failed. Incorrect password.');
+    } finally {
+      setModalLoading(false);
+    }
   };
 
   const loadAnalytics = () => {
@@ -402,6 +440,39 @@ const FarmerDashboard = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Order Tracking Actions */}
+                        {o.status === 'Delivered' ? (
+                          <div style={{ background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '0.6rem 0.8rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                              <span>✅</span> Delivery Complete
+                            </span>
+                            <span className="badge badge-green" style={{ fontSize: '0.72rem' }}>Permission Revoked</span>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: '1rem', marginBottom: '0.75rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span>📍</span> Update Tracking Status (Security Required):
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              {['Preparing', 'Packed', 'Out for Delivery', 'Delivered'].map(status => {
+                                const isCurrent = o.status === status;
+                                return (
+                                  <button 
+                                    key={status} 
+                                    className={`btn btn-sm ${isCurrent ? 'btn-primary' : 'btn-outline'}`}
+                                    onClick={() => setShowPasswordModal({ orderId: o._id, targetStatus: status })}
+                                    disabled={isCurrent}
+                                    style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                                  >
+                                    {isCurrent ? `● ${status}` : status}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'right' }}>
                           Ordered: {new Date(o.createdAt).toLocaleString()}
                         </div>
@@ -967,6 +1038,65 @@ const FarmerDashboard = () => {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* PASSWORD CONFIRMATION MODAL */}
+      {showPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)' }}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel" style={{ maxWidth: '400px', width: '100%', padding: '2rem', border: '1px solid rgba(255, 255, 255, 0.15)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '0.75rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>🔒</span> Confirm Status Update
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+              You are updating Order <strong>#{showPasswordModal.orderId.substring(0, 8)}...</strong> status to <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>{showPasswordModal.targetStatus}</span>. 
+              Please verify your seller account password to submit.
+            </p>
+            
+            <form onSubmit={handleFarmerStatusUpdate}>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Your Password</label>
+                <input 
+                  type="password" 
+                  className="input-field" 
+                  placeholder="Enter your security password..." 
+                  value={confirmPassword} 
+                  onChange={e => setConfirmPassword(e.target.value)} 
+                  required
+                  autoFocus
+                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', borderColor: 'rgba(255,255,255,0.1)' }}
+                />
+              </div>
+
+              {modalError && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', marginBottom: '1.25rem' }}>
+                  ❌ {modalError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-outline btn-sm" 
+                  onClick={() => {
+                    setShowPasswordModal(null);
+                    setConfirmPassword('');
+                    setModalError('');
+                  }}
+                  disabled={modalLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary btn-sm"
+                  disabled={modalLoading}
+                >
+                  {modalLoading ? 'Verifying...' : '🔑 Confirm & Save'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   </div>
   );

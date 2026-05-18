@@ -7,7 +7,7 @@ import {
   markNotificationRead, updateFarmerRanking, assignSellerLocation,
   updateUserTokens, resetUserPasswordDirectly, updateUserProfileDirectly,
   getAuditLogs, approveLocationRequest, updateOrderEarnings, resetSellerEarnings,
-  lookupUserByPhone, getPublicSettings
+  lookupUserByPhone, getPublicSettings, settleOrder
 } from '../controllers/adminController.js';
 import { requireAdmin } from '../middleware/auth.js';
 
@@ -49,6 +49,7 @@ router.put('/user/:id/password', requireAdmin, resetUserPasswordDirectly);
 router.put('/user/:id/profile', requireAdmin, updateUserProfileDirectly);
 router.get('/audit-logs', requireAdmin, getAuditLogs);
 router.put('/orders/:id/earnings', requireAdmin, updateOrderEarnings);
+router.post('/orders/settle', requireAdmin, settleOrder);
 router.post('/user/:id/reset-earnings', requireAdmin, resetSellerEarnings);
 
 // Publicly readable settings

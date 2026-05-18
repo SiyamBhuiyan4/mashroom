@@ -31,8 +31,32 @@ export const getAnalytics = (req, res) => {
     const pendingApprovals = db.count('users', { role: 'farmer', isApproved: false });
     const totalOrders = db.count('orders');
     const allOrders = db.findAll('orders');
-    const revenue = allOrders.filter(o => o.paymentStatus === 'Paid').reduce((sum, o) => sum + (o.totalCost || 0) + (o.deliveryCharge || 0), 0);
-    res.json({ totalBuyers, totalSellers, pendingApprovals, totalOrders, revenue });
+    
+    // Calculate actual finalized Admin revenue and Seller payouts
+    let adminRevenue = 0;
+    let totalSellerPayouts = 0;
+    
+    allOrders.forEach(o => {
+      if (o.status === 'Delivered') {
+        if (!o.farmerId) {
+          // Scenario A: No seller assigned (100% goes to Admin)
+          adminRevenue += (o.totalCost || 0) + (o.deliveryCharge || 0);
+        } else if (o.isSettled) {
+          // Scenario B: Seller assigned & settled (Admin gets commission, Seller gets payout)
+          adminRevenue += (o.adminEarnings || 0) + (o.deliveryCharge || 0);
+          totalSellerPayouts += (o.sellerEarnings || 0);
+        }
+      }
+    });
+
+    res.json({ 
+      totalBuyers, 
+      totalSellers, 
+      pendingApprovals, 
+      totalOrders, 
+      revenue: adminRevenue, 
+      totalSellerPayouts 
+    });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
@@ -563,6 +587,68 @@ export const resetSellerEarnings = (req, res) => {
     });
 
     res.json({ message: 'Seller earnings reset to zero successfully.', seller: updatedSeller });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const settleOrder = (req, res) => {
+  const { orderId, sellerPercentage } = req.body;
+  try {
+    const order = db.findById('orders', orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+    if (order.status !== 'Delivered') {
+      return res.status(400).json({ message: 'Order must be Delivered before performing settlement.' });
+    }
+    if (!order.farmerId) {
+      return res.status(400).json({ message: 'No seller was assigned to this order. Settlement not required.' });
+    }
+    if (order.isSettled) {
+      return res.status(400).json({ message: 'This order has already been settled.' });
+    }
+
+    const pct = parseFloat(sellerPercentage);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      return res.status(400).json({ message: 'Seller percentage must be between 0 and 100.' });
+    }
+
+    const totalCost = order.totalCost || 0;
+    const sellerEarnings = parseFloat(((totalCost * pct) / 100).toFixed(2));
+    const adminEarnings = parseFloat((totalCost - sellerEarnings).toFixed(2));
+
+    const updated = db.updateById('orders', orderId, {
+      isSettled: true,
+      sellerPercentage: pct,
+      sellerEarnings,
+      adminEarnings,
+      approvedEarnings: sellerEarnings, // Synchronize for backward-compatibility with ledger screens
+      isEarningApproved: true,          // Synchronize for backward-compatibility
+      settledAt: new Date().toISOString()
+    });
+
+    // Create a manual revenue transaction record for the farmer
+    db.create('transactions', {
+      userId: order.farmerId,
+      userRole: 'farmer',
+      type: 'revenue',
+      amount: sellerEarnings,
+      note: `Settlement payout for Order #${orderId} (${order.productName}, ${order.quantity}kg) at ${pct}%`,
+      addedBy: 'admin',
+      referenceId: orderId,
+      createdAt: new Date().toISOString()
+    });
+
+    // Create system audit log
+    db.create('auditlogs', {
+      type: 'order_settlement',
+      adminId: req.user.id,
+      targetOrderId: orderId,
+      targetUserId: order.farmerId,
+      details: `Settled Order #${orderId}. Seller (${order.farmerName}) share: ${pct}% (৳${sellerEarnings}), Admin commission: ৳${adminEarnings}`,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({ message: 'Settlement finalized successfully', order: updated });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

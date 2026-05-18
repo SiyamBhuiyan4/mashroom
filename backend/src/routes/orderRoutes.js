@@ -28,6 +28,6 @@ router.get('/buyer/:buyerId', requireSelfOrAdminBuyer, getBuyerOrders);
 router.get('/farmer/:farmerId', requireSelfOrAdminFarmer, getFarmerOrders);
 router.post('/request-charge', requireAdmin, requestDeliveryCharge);
 router.post('/confirm', requireAdmin, confirmOrderAndDispatch);
-router.post('/update-status', requireAdmin, updateOrderStatus);
+router.post('/update-status', requireAuth, updateOrderStatus);
 
 export default router;
