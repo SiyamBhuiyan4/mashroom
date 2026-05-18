@@ -188,6 +188,31 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Unauthorized role.' });
     }
 
+    // Automatic Buyer Analytics Synchronization Hook
+    const oldStatus = order.status;
+    if (status === 'Delivered' && oldStatus !== 'Delivered') {
+      // Add order amount to buyer's Total Spending transaction ledger
+      const existingTx = db.findOne('transactions', { referenceId: orderId, type: 'spending' });
+      if (!existingTx) {
+        db.create('transactions', {
+          userId: order.buyerId,
+          userRole: 'buyer',
+          type: 'spending',
+          amount: order.totalCost || 0,
+          note: `Automatic spending sync for Order #${orderId} (${order.productName || 'Mushroom'})`,
+          addedBy: 'system',
+          referenceId: orderId,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } else if (status !== 'Delivered' && oldStatus === 'Delivered') {
+      // Deduct order amount from buyer's Total Spending transaction ledger
+      const existingTx = db.findOne('transactions', { referenceId: orderId, type: 'spending' });
+      if (existingTx) {
+        db.deleteById('transactions', existingTx._id);
+      }
+    }
+
     // Perform the status update
     const updatePayload = { status };
     const updated = db.updateById('orders', orderId, updatePayload);
