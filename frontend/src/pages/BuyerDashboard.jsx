@@ -35,6 +35,19 @@ const BuyerDashboard = () => {
   const { user, logout, authHeader } = useContext(AuthContext);
   const navigate = useNavigate();
   const [tab, setTab] = useState('market');
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Automatically collapse sidebar on mobile, expand on desktop
+      setSidebarOpen(!mobile);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [msg, setMsg] = useState({ text: '', type: '' });
@@ -254,61 +267,113 @@ const BuyerDashboard = () => {
   const subtotal = selectedProduct ? selectedProduct.price * Number(orderForm.quantity) : 0;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Top bar */}
-      <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(7,26,14,0.85)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontSize: '1.5rem' }}>🍄</span>
-          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800 }}>Mashroom<span style={{ color: 'var(--color-primary)' }}>Magic</span></span>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', position: 'relative' }}>
+      {/* Frosted Backdrop Overlay on Mobile when Sidebar is toggled open */}
+      {isMobile && sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)} 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(5px)', zIndex: 999 }} 
+        />
+      )}
+
+      {/* Sidebar */}
+      <div style={isMobile ? {
+        position: 'fixed',
+        left: sidebarOpen ? '0px' : '-240px',
+        top: 0,
+        bottom: 0,
+        width: '240px',
+        background: 'rgba(7,26,14,0.98)',
+        borderRight: '1px solid var(--border-color)',
+        transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 1000
+      } : {
+        width: sidebarOpen ? '240px' : '64px',
+        minHeight: '100vh',
+        background: 'rgba(7,26,14,0.95)',
+        borderRight: '1px solid var(--border-color)',
+        transition: 'width 0.3s',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <div style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }} onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>🍄</span>
+          {(sidebarOpen || isMobile) && <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden' }}>Mashroom Magic</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-          {msg.text && <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontSize: '0.85rem', color: msg.type === 'error' ? '#ef4444' : 'var(--color-primary)' }}>{msg.text}</motion.span>}
-          
-          <div style={{ position: 'relative' }}>
-            <div className="avatar" onClick={() => setShowDropdown(!showDropdown)}>
-              {user?.avatar ? <img src={user.avatar} alt="Avatar" /> : user?.name?.[0]?.toUpperCase()}
-            </div>
+        <nav style={{ flex: 1, padding: '0.75rem 0', overflowY: 'auto' }}>
+          {TAB.map(t => (
+            <button key={t.id} onClick={() => { setTab(t.id); if (isMobile) setSidebarOpen(false); }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: (sidebarOpen || isMobile) ? '0.75rem 1.25rem' : '0.75rem', background: tab === t.id ? 'rgba(34,197,94,0.12)' : 'transparent', border: 'none', color: tab === t.id ? 'var(--color-primary)' : 'var(--text-muted)', cursor: 'pointer', borderLeft: tab === t.id ? '3px solid var(--color-primary)' : '3px solid transparent', transition: 'all 0.2s', fontSize: '0.9rem', fontFamily: 'var(--font-body)', textAlign: 'left', position: 'relative' }}>
+              <span style={{ fontSize: '1.1rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                {t.icon}
+              </span>
+              {(sidebarOpen || isMobile) && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{t.label}</span>}
+            </button>
+          ))}
+        </nav>
+        <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
+          <button onClick={() => { logout(); navigate('/'); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-md)', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'var(--font-body)' }}>
+            <span>🚪</span>{(sidebarOpen || isMobile) && <span>Logout</span>}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Pane */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', width: '100%' }}>
+        {/* Top bar */}
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(7,26,14,0.85)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 50 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {isMobile && (
+              <button 
+                onClick={() => setSidebarOpen(!sidebarOpen)} 
+                style={{ background: 'none', border: 'none', color: 'var(--text-main)', fontSize: '1.5rem', cursor: 'pointer', padding: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                ☰
+              </button>
+            )}
+            <h2 style={{ fontSize: '1.2rem', margin: 0, fontFamily: 'var(--font-heading)' }}>
+              {TAB.find(t => t.id === tab)?.label}
+            </h2>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            {msg.text && <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontSize: '0.85rem', color: msg.type === 'error' ? '#ef4444' : 'var(--color-primary)' }}>{msg.text}</motion.span>}
             
-            <AnimatePresence>
-              {showDropdown && (
-                <>
-                  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1 }} onClick={() => setShowDropdown(false)} />
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="profile-dropdown">
-                    <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '0.25rem' }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>{user?.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Buyer Account</div>
-                    </div>
-                    <button className="dropdown-item" onClick={() => { setIsProfileOpen(true); setShowDropdown(false); }}>
-                      <Settings size={16} /> Profile Settings
-                    </button>
-                    <button className="dropdown-item" style={{ color: '#fca5a5' }} onClick={() => { logout(); navigate('/'); }}>
-                      <LogOut size={16} /> Logout
-                    </button>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
+            <div style={{ position: 'relative' }}>
+              <div className="avatar" onClick={() => setShowDropdown(!showDropdown)}>
+                {user?.avatar ? <img src={user.avatar} alt="Avatar" /> : user?.name?.[0]?.toUpperCase()}
+              </div>
+              
+              <AnimatePresence>
+                {showDropdown && (
+                  <>
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1 }} onClick={() => setShowDropdown(false)} />
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="profile-dropdown">
+                      <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '0.25rem' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>{user?.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Buyer Account</div>
+                      </div>
+                      <button className="dropdown-item" onClick={() => { setIsProfileOpen(true); setShowDropdown(false); }}>
+                        <Settings size={16} /> Profile Settings
+                      </button>
+                      <button className="dropdown-item" style={{ color: '#fca5a5' }} onClick={() => { logout(); navigate('/'); }}>
+                        <LogOut size={16} /> Logout
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
-      </div>
-      
-      <ProfilePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
 
-      {/* Tab nav */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: 'rgba(7,26,14,0.6)', backdropFilter: 'blur(8px)', overflowX: 'auto' }}>
-        {TAB.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{
-              padding: '1rem 1.5rem', background: 'transparent', border: 'none', borderBottom: tab === t.id ? '2px solid var(--color-primary)' : '2px solid transparent',
-              color: tab === t.id ? 'var(--color-primary)' : 'var(--text-muted)', fontWeight: tab === t.id ? 700 : 500, display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s'
-            }}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
+        <ProfilePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: '1.5rem', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+        {/* Content */}
+        <div style={{ flex: 1, padding: '1.5rem', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
 
@@ -888,6 +953,7 @@ const BuyerDashboard = () => {
         </AnimatePresence>
       </div>
     </div>
+  </div>
   );
 };
 
