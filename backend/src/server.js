@@ -42,6 +42,45 @@ app.use(cors({
 app.use(express.json());
 app.use('/api/', limiter);
 
+import { pendingWrites } from './config/fileDB.js';
+
+// Response Interceptor Middleware to block Vercel container freezes
+// until all pending background cloud database writes are 100% completed!
+app.use(async (req, res, next) => {
+  const originalJson = res.json;
+  const originalSend = res.send;
+
+  res.json = async function (body) {
+    if (pendingWrites.length > 0) {
+      try {
+        console.log(`⏳ Awaiting ${pendingWrites.length} pending cloud writes before returning JSON response...`);
+        await Promise.all(pendingWrites);
+      } catch (err) {
+        console.error('⚠️ Cloud write await error in res.json interceptor:', err.message);
+      } finally {
+        pendingWrites.length = 0; // Clear the array
+      }
+    }
+    return originalJson.call(this, body);
+  };
+
+  res.send = async function (body) {
+    if (pendingWrites.length > 0) {
+      try {
+        console.log(`⏳ Awaiting ${pendingWrites.length} pending cloud writes before returning SEND response...`);
+        await Promise.all(pendingWrites);
+      } catch (err) {
+        console.error('⚠️ Cloud write await error in res.send interceptor:', err.message);
+      } finally {
+        pendingWrites.length = 0; // Clear the array
+      }
+    }
+    return originalSend.call(this, body);
+  };
+
+  next();
+});
+
 
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);

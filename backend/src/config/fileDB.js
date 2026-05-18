@@ -17,6 +17,9 @@ const getFilePath = (collection) => path.join(DATA_DIR, `${collection}.json`);
 // In-memory cache for ultra-fast synchronous operations
 const memCache = {};
 
+// Array to track all pending asynchronous cloud write promises
+export const pendingWrites = [];
+
 // --- ExtendsClass Cloud Database Sync Config ---
 const CLOUD_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/bbafaaa';
 
@@ -96,8 +99,8 @@ const writeCollection = (collection, data) => {
   // 1. Persist locally in background (non-blocking)
   fs.writeFile(getFilePath(collection), JSON.stringify(data, null, 2), () => {});
 
-  // 2. Persist to ExtendsClass Cloud Database asynchronously (non-blocking)
-  fetch(CLOUD_BIN_URL, {
+  // 2. Persist to ExtendsClass Cloud Database asynchronously (tracked for middleware awaiting)
+  const promise = fetch(CLOUD_BIN_URL, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
@@ -106,6 +109,8 @@ const writeCollection = (collection, data) => {
   }).catch(err => {
     console.error('⚠️ ExtendsClass Cloud save error:', err.message);
   });
+
+  pendingWrites.push(promise);
 };
 
 const generateId = () => Date.now().toString() + Math.random().toString(36).slice(2, 7);
