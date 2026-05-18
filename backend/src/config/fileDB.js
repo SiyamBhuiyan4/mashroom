@@ -5,7 +5,11 @@ import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, '../../data');
+
+// On Vercel, the filesystem is read-only except for '/tmp'. 
+// We use '/tmp/data' as a writable database fallback to prevent 500 crashes!
+const isVercel = process.env.VERCEL === '1';
+const DATA_DIR = isVercel ? '/tmp/data' : path.join(__dirname, '../../data');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
