@@ -718,3 +718,37 @@ export const deleteGroupMessage = (req, res) => {
   }
 };
 
+export const getUnreadMessageCount = (req, res) => {
+  const userId = req.user.id;
+  const role = req.user.role;
+
+  try {
+    let unreadCount = 0;
+
+    if (role === 'admin') {
+      // 1. Unread chat thread messages from users
+      const chatMsgs = db.findAll('chat_messages') || [];
+      const unreadChat = chatMsgs.filter(m => m.senderRole !== 'admin' && !m.read).length;
+
+      // 2. Open support request tickets
+      const supportMsgs = db.findAll('supportmessages') || [];
+      const unreadSupport = supportMsgs.filter(s => s.status === 'open').length;
+
+      // 3. Unread general buyer inquiries
+      const generalMsgs = db.findAll('messages') || [];
+      const unreadGeneral = generalMsgs.filter(g => !g.read).length;
+
+      unreadCount = unreadChat + unreadSupport + unreadGeneral;
+    } else {
+      // Users count unread replies from Admin in their direct chat thread
+      const userMsgs = db.find('chat_messages', { threadId: userId }) || [];
+      unreadCount = userMsgs.filter(m => m.senderRole === 'admin' && !m.read).length;
+    }
+
+    res.json({ unreadCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+

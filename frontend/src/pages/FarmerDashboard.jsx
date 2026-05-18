@@ -5,7 +5,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import ProfilePanel from '../components/ProfilePanel';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
-import { User, LogOut, Settings, BarChart3, Package, Coins, LayoutGrid, Camera, X, MessageSquare } from 'lucide-react';
+import { User, LogOut, Settings, BarChart3, Package, Coins, LayoutGrid, Camera, X, MessageSquare, Bell } from 'lucide-react';
 
 const TAB = [
   { id: 'orders', icon: <Package size={18} />, label: 'Orders' },
@@ -15,6 +15,7 @@ const TAB = [
   { id: 'seller_chat', icon: <MessageSquare size={18} />, label: 'Seller Chat' },
   { id: 'gallery', icon: <LayoutGrid size={18} />, label: 'Showcase' },
   { id: 'prices', icon: <Coins size={18} />, label: 'Rates' },
+  { id: 'notifications', icon: <Bell size={18} />, label: 'Notifications' },
 ];
 
 const STATUS_COLORS = {
@@ -65,9 +66,65 @@ const FarmerDashboard = () => {
   const [modalError, setModalError] = useState('');
 
   const [transactions, setTransactions] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const { authHeader } = useContext(AuthContext);
 
   const showMsg = (text, type = 'success') => { setMsg({ text, type }); setTimeout(() => setMsg({ text: '', type: '' }), 3500); };
+
+  const loadNotifications = () => {
+    axios.get('/api/notifications', authHeader())
+      .then(r => setNotifications(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {});
+  };
+
+  const loadUnreadMessages = () => {
+    axios.get('/api/messages/unread-count', authHeader())
+      .then(r => setUnreadMessages(r.data.unreadCount || 0))
+      .catch(() => {});
+  };
+
+  const markNotifRead = async (id) => {
+    try {
+      await axios.put(`/api/notifications/${id}/read`, {}, authHeader());
+      loadNotifications();
+    } catch {}
+  };
+
+  const markAllNotifsRead = async () => {
+    try {
+      await axios.post('/api/notifications/mark-all-read', {}, authHeader());
+      loadNotifications();
+      showMsg('All notifications marked as read.');
+    } catch {}
+  };
+
+  const clearAllNotifs = async () => {
+    try {
+      await axios.post('/api/notifications/clear-all', {}, authHeader());
+      loadNotifications();
+      showMsg('All notifications cleared.');
+    } catch {}
+  };
+
+  const clearNotif = async (id, e) => {
+    if (e) e.stopPropagation();
+    try {
+      await axios.delete(`/api/notifications/${id}`, authHeader());
+      loadNotifications();
+      showMsg('Notification cleared.');
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadUnreadMessages();
+    loadNotifications();
+    const interval = setInterval(() => {
+      loadUnreadMessages();
+      loadNotifications();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleGetGPS = () => {
     setGpsLoading(true);
@@ -191,6 +248,7 @@ const FarmerDashboard = () => {
     try {
       const { data } = await axios.get('/api/messages/unified/thread', authHeader());
       setChatMessages(data && Array.isArray(data.messages) ? data.messages : []);
+      loadUnreadMessages();
     } catch (err) {
       console.error('Failed to load chat history:', err);
     }
@@ -314,6 +372,16 @@ const FarmerDashboard = () => {
               {t.id === 'orders' && pendingOrders.length > 0 && (
                 <span style={{ position: 'absolute', top: '50%', right: '12px', transform: 'translateY(-50%)', background: 'var(--color-warning)', color: '#000', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                   {pendingOrders.length}
+                </span>
+              )}
+              {t.id === 'support' && unreadMessages > 0 && (
+                <span style={{ position: 'absolute', top: '50%', right: '12px', transform: 'translateY(-50%)', background: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                  {unreadMessages}
+                </span>
+              )}
+              {t.id === 'notifications' && notifications.filter(n => !n.read).length > 0 && (
+                <span style={{ position: 'absolute', top: '50%', right: '12px', transform: 'translateY(-50%)', background: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                  {notifications.filter(n => !n.read).length}
                 </span>
               )}
             </button>
@@ -1029,6 +1097,50 @@ const FarmerDashboard = () => {
                           {new Date(p.setAt || p.updatedAt).toLocaleDateString()}
                         </div>
                       </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* NOTIFICATIONS */}
+            {tab === 'notifications' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-heading)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    🔔 My Notifications
+                    {notifications.filter(n => !n.read).length > 0 && (
+                      <span className="badge badge-red">{notifications.filter(n => !n.read).length} new</span>
+                    )}
+                  </h3>
+                  {Array.isArray(notifications) && notifications.length > 0 && (
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={markAllNotifsRead} style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--color-primary)', padding: '0.4rem 0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s' }}>Mark all read</button>
+                      <button onClick={clearAllNotifs} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', padding: '0.4rem 0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s' }}>Clear all</button>
+                    </div>
+                  )}
+                </div>
+
+                {!Array.isArray(notifications) || notifications.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>🔔</div>
+                    <p style={{ color: 'var(--text-muted)' }}>No notifications yet.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {notifications.map(n => (
+                      <div key={n._id} onClick={() => markNotifRead(n._id)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', background: n.read ? 'transparent' : 'rgba(34,197,94,0.06)', border: '1px solid', borderColor: n.read ? 'rgba(255,255,255,0.04)' : 'rgba(34,197,94,0.15)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s' }}>
+                        <div>
+                          <div style={{ fontWeight: n.read ? 500 : 700, fontSize: '0.95rem', color: n.read ? 'var(--text-main)' : 'var(--color-primary)' }}>{n.title}</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>{n.message}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          {!n.read && <div className="pulse-green" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)' }} />}
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(n.createdAt).toLocaleDateString()}</span>
+                          <button onClick={(e) => clearNotif(n._id, e)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.95rem', padding: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }} title="Clear notification">🗑️</button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}

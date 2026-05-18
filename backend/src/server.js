@@ -11,6 +11,7 @@ import mapRoutes from './routes/mapRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 dotenv.config();
 
@@ -102,6 +103,7 @@ app.use('/api/map', mapRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: '🍄 Mashroom Magic API running (JSON storage)' });

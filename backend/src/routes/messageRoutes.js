@@ -6,11 +6,14 @@ import {
   sendGeneralSupportMessage,
   getUserThread, sendMessageToAdmin, adminGetThreads, adminGetThreadDetails,
   adminReplyToThread, adminResolveThread, getGroupMessages, sendGroupMessage,
-  pinGroupMessage, unpinGroupMessage, deleteGroupMessage
+  pinGroupMessage, unpinGroupMessage, deleteGroupMessage,
+  getUnreadMessageCount
 } from '../controllers/messageController.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
+
+router.get('/unread-count', requireAuth, getUnreadMessageCount);
 
 // General messages (buyer contact)
 router.post('/', requireAuth, sendMessage);
