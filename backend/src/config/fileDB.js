@@ -36,9 +36,12 @@ export const initDB = async () => {
 
   try {
     console.log('📡 Connecting to Cloud MongoDB Atlas for fileDB persistent storage...');
-    // Connect to MongoDB Atlas (if not already connected)
+    // Connect to MongoDB Atlas (if not already connected) with a fast 2-second timeout!
     if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(uri);
+      await mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 2000,
+        connectTimeoutMS: 2000
+      });
     }
     console.log('✅ Connected to MongoDB Atlas. Preloading collections into cache...');
 
