@@ -42,7 +42,19 @@ app.use(cors({
 app.use(express.json());
 app.use('/api/', limiter);
 
-import { pendingWrites } from './config/fileDB.js';
+import { pendingWrites, getInitPromise } from './config/fileDB.js';
+
+// Database Initialization Gate Middleware for serverless environments (Vercel)
+// This guarantees the database is fully preloaded from the cloud before processing ANY requests!
+app.use(async (req, res, next) => {
+  try {
+    await getInitPromise();
+    next();
+  } catch (err) {
+    console.error('❌ Database initialization failed:', err.message);
+    res.status(500).json({ message: 'Database initialization failed. Please try again.' });
+  }
+});
 
 // Response Interceptor Middleware to block Vercel container freezes
 // until all pending background cloud database writes are 100% completed!

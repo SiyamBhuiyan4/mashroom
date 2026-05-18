@@ -23,11 +23,53 @@ export const pendingWrites = [];
 // --- ExtendsClass Cloud Database Sync Config ---
 const CLOUD_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/bbafaaa';
 
+// Pre-defined known collections to ensure they are always initialized
+const COLLECTIONS = [
+  'adminsettings',
+  'auditlogs',
+  'chat_messages',
+  'chat_threads',
+  'group_messages',
+  'mapnodes',
+  'markers',
+  'messages',
+  'notifications',
+  'orders',
+  'products',
+  'supportmessages',
+  'transactions',
+  'users'
+];
+
+let initPromise = null;
+
+// Exported getter to allow other modules/middlewares to await initialization completion
+export const getInitPromise = () => {
+  if (!initPromise) {
+    initPromise = initDB();
+  }
+  return initPromise;
+};
+
 // --- Initialization routine called on server boot ---
 export const initDB = async () => {
   try {
     console.log('📡 Connecting to ExtendsClass Cloud Database for persistent storage...');
-    const response = await fetch(CLOUD_BIN_URL);
+    
+    // Initialize memCache with empty arrays for all collections by default to prevent undefined reads/writes
+    for (const col of COLLECTIONS) {
+      memCache[col] = [];
+    }
+
+    // Always fetch with cache-busting on serverless networks to avoid stale GET results!
+    const cacheBuster = `?t=${Date.now()}`;
+    const response = await fetch(`${CLOUD_BIN_URL}${cacheBuster}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
+
     if (response.ok) {
       const dbData = await response.json();
       for (const key in dbData) {
