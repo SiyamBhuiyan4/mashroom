@@ -808,14 +808,16 @@ const AdminDashboard = () => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {notifications.slice(0, 10).map(n => (
                           <div key={n._id} onClick={() => markNotifRead(n._id)}
-                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: n.read ? 'transparent' : 'rgba(34,197,94,0.06)', border: '1px solid', borderColor: n.read ? 'rgba(255,255,255,0.04)' : 'rgba(34,197,94,0.15)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            <div>
+                            style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '0.5rem' : '0', padding: '0.75rem 1rem', background: n.read ? 'transparent' : 'rgba(34,197,94,0.06)', border: '1px solid', borderColor: n.read ? 'rgba(255,255,255,0.04)' : 'rgba(34,197,94,0.15)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s' }}>
+                            <div style={{ width: isMobile ? '100%' : 'auto' }}>
                               <div style={{ fontWeight: n.read ? 400 : 600, fontSize: '0.9rem' }}>{n.title}</div>
-                              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{n.message}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{n.message}</div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              {!n.read && <div className="pulse-green" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)' }} />}
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(n.createdAt).toLocaleDateString()}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', marginTop: isMobile ? '0.25rem' : '0' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {!n.read && <div className="pulse-green" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)' }} />}
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(n.createdAt).toLocaleDateString()}</span>
+                              </div>
                               <button onClick={(e) => clearNotif(n._id, e)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }} title="Clear notification">🗑️</button>
                             </div>
                           </div>
