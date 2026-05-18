@@ -29,7 +29,19 @@ const AdminDashboard = () => {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [tab, setTab] = useState('overview');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Automatically collapse sidebar on mobile, expand on desktop
+      setSidebarOpen(!mobile);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Data states
   const [analytics, setAnalytics] = useState(null);
@@ -601,39 +613,77 @@ const AdminDashboard = () => {
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', position: 'relative' }}>
+      {/* Frosted Backdrop Overlay on Mobile when Sidebar is toggled open */}
+      {isMobile && sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)} 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(5px)', zIndex: 999 }} 
+        />
+      )}
+
       {/* Sidebar */}
-      <div style={{ width: sidebarOpen ? '240px' : '64px', minHeight: '100vh', background: 'rgba(7,26,14,0.95)', borderRight: '1px solid var(--border-color)', transition: 'width 0.3s', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={isMobile ? {
+        position: 'fixed',
+        left: sidebarOpen ? '0px' : '-240px',
+        top: 0,
+        bottom: 0,
+        width: '240px',
+        background: 'rgba(7,26,14,0.98)',
+        borderRight: '1px solid var(--border-color)',
+        transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 1000
+      } : {
+        width: sidebarOpen ? '240px' : '64px',
+        minHeight: '100vh',
+        background: 'rgba(7,26,14,0.95)',
+        borderRight: '1px solid var(--border-color)',
+        transition: 'width 0.3s',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         <div style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }} onClick={() => setSidebarOpen(!sidebarOpen)}>
           <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>🍄</span>
-          {sidebarOpen && <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden' }}>Mashroom<span style={{ color: 'var(--color-primary)' }}>Magic</span></span>}
+          {(sidebarOpen || isMobile) && <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden' }}>Mashroom<span style={{ color: 'var(--color-primary)' }}>Magic</span></span>}
         </div>
-        <nav style={{ flex: 1, padding: '0.75rem 0' }}>
+        <nav style={{ flex: 1, padding: '0.75rem 0', overflowY: 'auto' }}>
           {NAV.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: sidebarOpen ? '0.75rem 1.25rem' : '0.75rem', background: tab === n.id ? 'rgba(34,197,94,0.12)' : 'transparent', border: 'none', color: tab === n.id ? 'var(--color-primary)' : 'var(--text-muted)', cursor: 'pointer', borderLeft: tab === n.id ? '3px solid var(--color-primary)' : '3px solid transparent', transition: 'all 0.2s', fontSize: '0.9rem', fontFamily: 'var(--font-body)', textAlign: 'left' }}>
+            <button key={n.id} onClick={() => { setTab(n.id); if (isMobile) setSidebarOpen(false); }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: (sidebarOpen || isMobile) ? '0.75rem 1.25rem' : '0.75rem', background: tab === n.id ? 'rgba(34,197,94,0.12)' : 'transparent', border: 'none', color: tab === n.id ? 'var(--color-primary)' : 'var(--text-muted)', cursor: 'pointer', borderLeft: tab === n.id ? '3px solid var(--color-primary)' : '3px solid transparent', transition: 'all 0.2s', fontSize: '0.9rem', fontFamily: 'var(--font-body)', textAlign: 'left' }}>
               <span style={{ fontSize: '1.1rem', flexShrink: 0, position: 'relative' }}>
                 {n.icon}
                 {n.id === 'farmers' && pendingFarmers.length > 0 && <span style={{ position: 'absolute', top: '-4px', right: '-6px', background: '#ef4444', color: '#fff', borderRadius: '50%', width: '14px', height: '14px', fontSize: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{pendingFarmers.length}</span>}
                 {n.id === 'messages' && messages.filter(m => !m.reply).length > 0 && <span style={{ position: 'absolute', top: '-4px', right: '-6px', background: 'var(--color-warning)', color: '#000', borderRadius: '50%', width: '14px', height: '14px', fontSize: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{messages.filter(m => !m.reply).length}</span>}
                 {n.id === 'support' && supportMsgs.filter(m => m.status === 'open').length > 0 && <span style={{ position: 'absolute', top: '-4px', right: '-6px', background: '#f97316', color: '#fff', borderRadius: '50%', width: '14px', height: '14px', fontSize: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{supportMsgs.filter(m => m.status === 'open').length}</span>}
               </span>
-              {sidebarOpen && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{n.label}</span>}
+              {(sidebarOpen || isMobile) && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{n.label}</span>}
             </button>
           ))}
         </nav>
         <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
           <button onClick={handleLogout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-md)', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'var(--font-body)' }}>
-            <span>🚪</span>{sidebarOpen && <span>Logout</span>}
+            <span>🚪</span>{(sidebarOpen || isMobile) && <span>Logout</span>}
           </button>
         </div>
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', width: '100%' }}>
         {/* Top bar */}
         <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(7,26,14,0.7)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 50 }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {isMobile && (
+              <button 
+                onClick={() => setSidebarOpen(!sidebarOpen)} 
+                style={{ background: 'none', border: 'none', color: 'var(--text-main)', fontSize: '1.5rem', cursor: 'pointer', padding: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                ☰
+              </button>
+            )}
             <h2 style={{ fontSize: '1.2rem', margin: 0, fontFamily: 'var(--font-heading)' }}>{NAV.find(n => n.id === tab)?.label}</h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
