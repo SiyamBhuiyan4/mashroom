@@ -42,13 +42,50 @@ const COLLECTIONS = [
 ];
 
 let initPromise = null;
+let lastSyncTime = 0;
+let syncInProgress = null;
 
 // Exported getter to allow other modules/middlewares to await initialization completion
-export const getInitPromise = () => {
+export const getInitPromise = async () => {
   if (!initPromise) {
     initPromise = initDB();
+    await initPromise;
+    lastSyncTime = Date.now();
+    return;
   }
-  return initPromise;
+
+  await initPromise;
+
+  // Auto-refresh the in-memory cache if it is older than 5 seconds (5000ms) on Vercel environments
+  if (isVercel && Date.now() - lastSyncTime > 5000) {
+    if (!syncInProgress) {
+      syncInProgress = (async () => {
+        try {
+          const cacheBuster = `?t=${Date.now()}`;
+          const response = await fetch(`${CLOUD_BIN_URL}${cacheBuster}`, {
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          if (response.ok) {
+            const dbData = await response.json();
+            for (const key in dbData) {
+              memCache[key] = dbData[key];
+              fs.writeFileSync(getFilePath(key), JSON.stringify(dbData[key], null, 2));
+            }
+            lastSyncTime = Date.now();
+            console.log('🔄 ExtendsClass cloud database auto-refreshed successfully (TTL expired)!');
+          }
+        } catch (err) {
+          console.error('⚠️ ExtendsClass auto-refresh error:', err.message);
+        } finally {
+          syncInProgress = null;
+        }
+      })();
+    }
+    await syncInProgress;
+  }
 };
 
 // --- Initialization routine called on server boot ---
@@ -56,9 +93,11 @@ export const initDB = async () => {
   try {
     console.log('📡 Connecting to ExtendsClass Cloud Database for persistent storage...');
     
-    // Initialize memCache with empty arrays for all collections by default to prevent undefined reads/writes
+    // Initialize memCache with empty arrays if not already initialized
     for (const col of COLLECTIONS) {
-      memCache[col] = [];
+      if (!memCache[col]) {
+        memCache[col] = [];
+      }
     }
 
     // Always fetch with cache-busting on serverless networks to avoid stale GET results!
