@@ -2,7 +2,9 @@ import React, { useState, useContext, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
-import { User, Mail, Phone, Lock, Camera, X, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, Lock, Camera, X, ShieldCheck, Eye, EyeOff, Trash2 } from 'lucide-react';
+
+const BD_FLAG_URL = 'https://upload.wikimedia.org/wikipedia/commons/f/f9/Flag_of_Bangladesh.svg';
 
 const ProfilePanel = ({ isOpen, onClose }) => {
   const { user, setUser, authHeader } = useContext(AuthContext);
@@ -72,7 +74,12 @@ const ProfilePanel = ({ isOpen, onClose }) => {
     setShowPasswordModal(true);
   };
 
-  // Confirm with password — execute the pending action
+  const handleDeleteAvatarClick = () => {
+    setPendingAction('deleteAvatar');
+    setCurrentPassword('');
+    setShowPasswordModal(true);
+  };
+
   const handlePasswordConfirm = async () => {
     if (!currentPassword.trim()) {
       showMsg('Please enter your current password.', 'error');
@@ -82,6 +89,8 @@ const ProfilePanel = ({ isOpen, onClose }) => {
     try {
       if (pendingAction === 'avatar') {
         await executeAvatarUpload();
+      } else if (pendingAction === 'deleteAvatar') {
+        await executeAvatarDelete();
       } else {
         await executeProfileSave();
       }
@@ -127,6 +136,23 @@ const ProfilePanel = ({ isOpen, onClose }) => {
       showMsg('Profile picture updated!');
     } catch (err) {
       showMsg(err.response?.data?.message || 'Failed to upload avatar.', 'error');
+    }
+  };
+
+  const executeAvatarDelete = async () => {
+    try {
+      const payload = { deleteAvatar: true, currentPassword };
+      const { data } = await axios.put(
+        `/api/auth/profile/${user._id}`,
+        payload,
+        authHeader()
+      );
+      setUser(data);
+      setShowPasswordModal(false);
+      setCurrentPassword('');
+      showMsg('Profile picture removed!');
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to remove avatar.', 'error');
     }
   };
 
@@ -181,18 +207,19 @@ const ProfilePanel = ({ isOpen, onClose }) => {
               {/* Avatar Section */}
               <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
                 <div style={{ position: 'relative', display: 'inline-block' }}>
-                  {displayAvatar ? (
-                    <img src={displayAvatar} alt="Avatar"
-                      style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: `3px solid ${avatarPreview ? '#f59e0b' : 'var(--color-primary)'}` }} />
-                  ) : (
-                    <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', color: 'white' }}>
-                      {user?.name?.[0]?.toUpperCase()}
-                    </div>
-                  )}
+                  <img src={displayAvatar || BD_FLAG_URL} alt="Avatar"
+                    style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: `3px solid ${avatarPreview ? '#f59e0b' : 'var(--color-primary)'}`, background: 'var(--bg-secondary)' }} />
+                  
                   <label style={{ position: 'absolute', bottom: 0, right: 0, background: avatarPreview ? '#f59e0b' : 'var(--color-primary)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid var(--bg-secondary)', color: 'white' }}>
                     <Camera size={16} />
                     <input ref={fileInputRef} type="file" hidden accept="image/*" onChange={handleAvatarSelect} />
                   </label>
+                  
+                  {user?.avatar && !avatarPreview && (
+                    <button type="button" onClick={handleDeleteAvatarClick} style={{ position: 'absolute', bottom: 0, left: 0, background: '#ef4444', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid var(--bg-secondary)', color: 'white', padding: 0 }}>
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
                 {avatarPreview && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -289,11 +316,13 @@ const ProfilePanel = ({ isOpen, onClose }) => {
                       <ShieldCheck size={26} color="var(--color-primary)" />
                     </div>
                     <h3 style={{ fontSize: '1.15rem', marginBottom: '0.4rem' }}>
-                      {pendingAction === 'avatar' ? 'Confirm Photo Change' : 'Confirm Profile Changes'}
+                      {pendingAction === 'avatar' ? 'Confirm Photo Change' : pendingAction === 'deleteAvatar' ? 'Confirm Photo Removal' : 'Confirm Profile Changes'}
                     </h3>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6 }}>
                       {pendingAction === 'avatar'
                         ? 'Enter your current password to upload your new profile picture.'
+                        : pendingAction === 'deleteAvatar'
+                        ? 'Enter your current password to remove your profile picture.'
                         : 'Enter your current password to save your profile changes.'}
                     </p>
                   </div>
@@ -304,6 +333,14 @@ const ProfilePanel = ({ isOpen, onClose }) => {
                       <img src={avatarPreview} alt="Preview"
                         style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-primary)' }} />
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>New photo preview</div>
+                    </div>
+                  )}
+                  
+                  {pendingAction === 'deleteAvatar' && (
+                    <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+                      <img src={BD_FLAG_URL} alt="Preview"
+                        style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #ef4444' }} />
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>Will revert to default flag</div>
                     </div>
                   )}
 

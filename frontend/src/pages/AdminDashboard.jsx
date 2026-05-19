@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -89,6 +89,9 @@ const AdminDashboard = () => {
   const [overrideManualRevenue, setOverrideManualRevenue] = useState(0);
   const [overrideSellerCode, setOverrideSellerCode] = useState('');
   const [overrideEnrolledInGroupChat, setOverrideEnrolledInGroupChat] = useState(true);
+  const [overrideAvatar, setOverrideAvatar] = useState(null);
+  const [avatarUploadLoading, setAvatarUploadLoading] = useState(false);
+  const avatarInputRef = useRef(null);
 
   // Financial Ledger states
   const [overrideTransactions, setOverrideTransactions] = useState([]);
@@ -488,12 +491,46 @@ const AdminDashboard = () => {
     setOverrideOnline(!!targetUser.online);
     setOverrideManualRevenue(targetUser.manualRevenueAdjustment || 0);
     setOverrideEnrolledInGroupChat(targetUser.enrolledInGroupChat !== false);
+    setOverrideAvatar(targetUser.avatar || null);
     
     // Financial Ledger Setup
     setTxnForm({ amount: '', note: '', referenceId: '' });
     loadOverrideTransactions(targetUser._id);
     
     setShowOverrideModal(true);
+  };
+
+  const handleOverrideAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAvatarUploadLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const { data } = await axios.put(`/api/admin/user/${overrideUser._id}/avatar`, fd, { headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'multipart/form-data' } });
+      setOverrideAvatar(data.user.avatar);
+      setOverrideUser(data.user);
+      loadUsers(); loadSellers(); loadBuyers();
+      showMsg('Avatar uploaded successfully!');
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Avatar upload failed', true);
+    }
+    setAvatarUploadLoading(false);
+  };
+
+  const handleOverrideAvatarDelete = async () => {
+    if (!window.confirm('Are you sure you want to remove this user\\'s profile picture?')) return;
+    setAvatarUploadLoading(true);
+    try {
+      const { data } = await axios.put(`/api/admin/user/${overrideUser._id}/avatar`, { deleteAvatar: true }, { headers: { Authorization: `Bearer ${user?.token}` } });
+      setOverrideAvatar(null);
+      setOverrideUser(data.user);
+      loadUsers(); loadSellers(); loadBuyers();
+      showMsg('Avatar removed successfully!');
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Avatar removal failed', true);
+    }
+    setAvatarUploadLoading(false);
   };
 
   const handleUpdateTokens = async (userId, action, amount = 1) => {
@@ -1940,6 +1977,25 @@ const AdminDashboard = () => {
                   </div>
                   <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>Add</button>
                 </form>
+              </div>
+
+              {/* Avatar Management */}
+              <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '0.95rem', marginBottom: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>User Avatar</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                  <img src={overrideAvatar || 'https://upload.wikimedia.org/wikipedia/commons/f/f9/Flag_of_Bangladesh.svg'} alt="User Avatar" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--border-color)', background: 'var(--bg-secondary)' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleOverrideAvatarUpload} />
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => avatarInputRef.current?.click()} disabled={avatarUploadLoading}>
+                      {avatarUploadLoading ? 'Uploading...' : 'Upload New Avatar'}
+                    </button>
+                    {overrideAvatar && (
+                      <button type="button" className="btn btn-sm" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }} onClick={handleOverrideAvatarDelete} disabled={avatarUploadLoading}>
+                        Remove Avatar
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Profile Details Form */}

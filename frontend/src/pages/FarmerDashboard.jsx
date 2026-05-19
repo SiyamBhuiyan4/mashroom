@@ -416,7 +416,7 @@ const FarmerDashboard = () => {
             
             <div style={{ position: 'relative' }}>
               <div className="avatar" onClick={() => setShowDropdown(!showDropdown)}>
-                {user?.avatar ? <img src={user.avatar} alt="Avatar" /> : user?.name?.[0]?.toUpperCase()}
+                {user?.avatar ? <img src={user.avatar} alt="Avatar" /> : <img src="https://upload.wikimedia.org/wikipedia/commons/f/f9/Flag_of_Bangladesh.svg" alt="Avatar" />}
               </div>
               
               <AnimatePresence>

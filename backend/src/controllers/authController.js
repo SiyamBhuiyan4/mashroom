@@ -175,6 +175,8 @@ export const updateProfile = async (req, res) => {
         console.error('Cloudinary upload error:', uploadErr);
         return res.status(500).json({ message: 'Failed to upload profile picture.' });
       }
+    } else if (req.body.deleteAvatar === 'true' || req.body.deleteAvatar === true) {
+      updates.avatar = null;
     }
 
     const updated = db.updateById('users', userId, updates);

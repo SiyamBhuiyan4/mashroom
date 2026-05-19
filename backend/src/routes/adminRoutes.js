@@ -7,9 +7,10 @@ import {
   markNotificationRead, updateFarmerRanking, assignSellerLocation,
   updateUserTokens, resetUserPasswordDirectly, updateUserProfileDirectly,
   getAuditLogs, approveLocationRequest, updateOrderEarnings, resetSellerEarnings,
-  lookupUserByPhone, getPublicSettings, settleOrder
+  lookupUserByPhone, getPublicSettings, settleOrder, updateUserAvatarDirectly
 } from '../controllers/adminController.js';
 import { requireAdmin } from '../middleware/auth.js';
+import upload from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ const router = express.Router();
 router.get('/products', getProducts);
 
 // Gated admin-only operations
+router.put('/user/:id/avatar', requireAdmin, upload.single('image'), updateUserAvatarDirectly);
 router.get('/analytics', requireAdmin, getAnalytics);
 router.get('/pending-farmers', requireAdmin, getPendingFarmers);
 router.post('/approve-farmer/:id', requireAdmin, approveFarmer);

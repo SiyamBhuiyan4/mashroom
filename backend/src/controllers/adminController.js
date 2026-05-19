@@ -592,6 +592,58 @@ export const resetSellerEarnings = (req, res) => {
   }
 };
 
+import cloudinary from '../config/cloudinary.js';
+import streamifier from 'streamifier';
+
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'mashroom-magic/avatars', resource_type: 'image' },
+      (error, result) => {
+        if (result) resolve(result.secure_url);
+        else reject(error);
+      }
+    );
+    streamifier.createReadStream(fileBuffer).pipe(stream);
+  });
+};
+
+export const updateUserAvatarDirectly = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const user = db.findById('users', id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const updates = {};
+    
+    if (req.file) {
+      const imageUrl = await uploadToCloudinary(req.file.buffer);
+      updates.avatar = imageUrl;
+    } else if (req.body.deleteAvatar === 'true' || req.body.deleteAvatar === true) {
+      updates.avatar = null;
+    } else {
+      return res.status(400).json({ message: 'No image file or delete flag provided.' });
+    }
+
+    const updatedUser = db.updateById('users', id, updates);
+    const { password, ...safeUser } = updatedUser;
+
+    db.create('auditlogs', {
+      type: 'update_user_avatar',
+      adminId: req.user?.id || 'admin',
+      targetUserId: id,
+      targetUserPhone: safeUser.phone,
+      action: req.file ? 'uploaded' : 'deleted',
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({ message: 'Avatar updated successfully', user: safeUser });
+  } catch (error) {
+    console.error('Admin avatar update error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const settleOrder = (req, res) => {
   const { orderId, sellerPercentage } = req.body;
   try {
