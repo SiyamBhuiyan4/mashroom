@@ -143,8 +143,8 @@ export const getSellers = (req, res) => {
     sellers = sortByOnlineStatus(sellers);
 
     const total = sellers.length;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
     const paginated = sellers.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
     res.json({ sellers: paginated, total, page: pageNum, pages: Math.ceil(total / limitNum) });
@@ -173,8 +173,8 @@ export const getBuyers = (req, res) => {
     buyers = sortByOnlineStatus(buyers);
 
     const total = buyers.length;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
     const paginated = buyers.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
     res.json({ buyers: paginated, total, page: pageNum, pages: Math.ceil(total / limitNum) });
