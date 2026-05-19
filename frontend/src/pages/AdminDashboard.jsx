@@ -252,7 +252,7 @@ const AdminDashboard = () => {
     try {
       setGroupLoading(true);
       const { data } = await axios.post('/api/messages/group', { message: groupInput }, { headers: { Authorization: `Bearer ${user?.token}` } });
-      setGroupMessages(prev => [...prev, data.data]);
+      setGroupMessages(prev => [...prev, data]);
       setGroupInput('');
     } catch {
       showMsg('Failed to send group message.', true);

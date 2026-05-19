@@ -188,7 +188,7 @@ const FarmerDashboard = () => {
     try {
       setGroupLoading(true);
       const { data } = await axios.post('/api/messages/group', { message: groupInput }, authHeader());
-      setGroupMessages(prev => Array.isArray(prev) ? [...prev, data.data] : [data.data]);
+      setGroupMessages(prev => Array.isArray(prev) ? [...prev, data] : [data]);
       setGroupInput('');
     } catch (err) {
       showMsg(err.response?.data?.message || 'Failed to send message to community chat.', 'error');
